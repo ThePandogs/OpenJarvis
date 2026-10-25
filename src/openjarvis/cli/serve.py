@@ -531,6 +531,17 @@ def serve(
     except Exception as exc:
         logger.debug("Speech backend discovery failed: %s", exc)
 
+    # Voice notes on the channel (opt-in per channel config).
+    if channel_bridge is not None:
+        try:
+            from openjarvis.channels._voice import configure_channel_voice
+
+            voice = configure_channel_voice(channel_bridge, config, speech_backend)
+            if voice:
+                console.print(f"  Voice:  [cyan]{voice}[/cyan]")
+        except Exception as exc:
+            logger.warning("Channel voice setup failed: %s", exc)
+
     # Create app
     from openjarvis.server.app import create_app
 

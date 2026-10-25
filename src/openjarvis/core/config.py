@@ -1258,6 +1258,12 @@ class TelegramChannelConfig:
     bot_token: str = ""
     allowed_chat_ids: str = ""
     parse_mode: str = "Markdown"
+    # Voice notes. Transcription uses [speech] backend/model/language; voice
+    # replies use [speech] tts_backend/voice_id/voice_speed.
+    voice_input: bool = False
+    voice_replies: str = "off"  # "off", "when_voice", "always"
+    voice_max_chars: int = 1000
+    voice_unrecognized_reply: str = "Sorry, I couldn't understand that voice message."
 
 
 @dataclass(slots=True)

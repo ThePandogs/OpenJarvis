@@ -304,6 +304,44 @@ app_token = "YOUR_SLACK_APP_TOKEN"
 
 Platform-specific settings are configured in nested sub-sections (e.g., `[channel.telegram]`, `[channel.discord]`).
 
+!!! note "`default_agent = \"simple\"` has no tools"
+    The `simple` agent cannot call tools, so a channel bot using it will say it
+    has no internet or email access even when `[tools] enabled` lists them. Set
+    `default_agent = "orchestrator"` (or another tool-using agent) to give the
+    channel the tools from `[tools] enabled`.
+
+### Telegram voice notes
+
+The Telegram channel can transcribe voice notes and audio files, and answer
+with voice notes. Both are off by default.
+
+```toml title="~/.openjarvis/config.toml"
+[channel.telegram]
+allowed_chat_ids = "123456789"   # strongly recommended with voice and tools
+voice_input = true                # transcribe incoming voice notes / audio
+voice_replies = "when_voice"      # "off", "when_voice" or "always"
+voice_max_chars = 1000            # longest spoken reply (cut at a sentence end)
+voice_unrecognized_reply = "Sorry, I couldn't understand that voice message."
+
+[speech]
+language = "es"                   # "" = auto-detect
+tts_backend = "kokoro"            # local; "openai_tts" / "cartesia" are cloud
+voice_id = "ef_dora"              # Kokoro voice for that language
+```
+
+- **Input** uses the `[speech]` speech-to-text backend (faster-whisper by
+  default). The transcript goes through the normal text flow, so the agent,
+  tools and session history behave exactly as for typed messages.
+- **Replies** are always sent as text first; the voice note follows. Code
+  blocks, URLs and Markdown are stripped before synthesis. Audio is encoded to
+  OGG/Opus with PyAV (no `ffmpeg` binary needed), the only format Telegram
+  shows as a voice note.
+- With `allowed_chat_ids` set, audio from other chats is ignored before it is
+  downloaded or transcribed.
+- Local replies need the `voice` extra (`kokoro`, which pulls PyTorch). The
+  server prints `Voice: in: …, out: …` at startup; a missing backend only
+  disables that direction, with a warning.
+
 ---
 
 ## Complete Example
