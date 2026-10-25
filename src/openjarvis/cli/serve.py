@@ -351,9 +351,17 @@ def serve(
                         if isinstance(tool_cls, type) and issubclass(
                             tool_cls, BaseTool
                         ):
+                            from openjarvis.agents.tool_resolver import (
+                                knowledge_tool_kwargs,
+                            )
                             from openjarvis.tools._paths import file_tool_kwargs
 
-                            tools.append(tool_cls(**file_tool_kwargs(name, config)))
+                            tools.append(
+                                tool_cls(
+                                    **file_tool_kwargs(name, config),
+                                    **knowledge_tool_kwargs(name),
+                                )
+                            )
                         elif isinstance(tool_cls, BaseTool):
                             tools.append(tool_cls)
 
@@ -478,10 +486,16 @@ def serve(
                                 continue
                             _tcls = ToolRegistry.get(_tname)
                             if isinstance(_tcls, type) and issubclass(_tcls, BaseTool):
+                                from openjarvis.agents.tool_resolver import (
+                                    knowledge_tool_kwargs,
+                                )
                                 from openjarvis.tools._paths import file_tool_kwargs
 
                                 _channel_tools.append(
-                                    _tcls(**file_tool_kwargs(_tname, config))
+                                    _tcls(
+                                        **file_tool_kwargs(_tname, config),
+                                        **knowledge_tool_kwargs(_tname),
+                                    )
                                 )
                             elif isinstance(_tcls, BaseTool):
                                 _channel_tools.append(_tcls)

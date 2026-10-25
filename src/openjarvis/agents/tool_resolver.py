@@ -259,7 +259,42 @@ def instantiate_registered_tool(
         return tool_cls(engine=engine, model=model)
     from openjarvis.tools._paths import file_tool_kwargs
 
-    return tool_cls(**file_tool_kwargs(name, app_config))
+    return tool_cls(**file_tool_kwargs(name, app_config), **knowledge_tool_kwargs(name))
+
+
+_KNOWLEDGE_TOOLS = frozenset({"knowledge_search", "knowledge_sql"})
+
+
+def knowledge_tool_kwargs(
+    name: str,
+    knowledge_db_path: str | Path | None = None,
+) -> dict[str, Any]:
+    """Bind knowledge tools to the store that connector syncs write to.
+
+    Without this, ``knowledge_search`` / ``knowledge_sql`` enabled through
+    ``[tools] enabled`` were constructed store-less and answered every call
+    with "No knowledge store configured", so an agent could never read the
+    emails a connector had already indexed. Returns ``{}`` for other tools and
+    when nothing has been synced yet (the tool then keeps reporting that).
+    """
+    if name not in _KNOWLEDGE_TOOLS:
+        return {}
+    if not knowledge_db_path:
+        from openjarvis.core.config import DEFAULT_CONFIG_DIR
+
+        knowledge_db_path = DEFAULT_CONFIG_DIR / "knowledge.db"
+    path = Path(knowledge_db_path)
+    if not path.exists():
+        logger.warning(
+            "Knowledge tool %r enabled but %s does not exist yet — connect and "
+            "sync a data source first.",
+            name,
+            path,
+        )
+        return {}
+    from openjarvis.connectors.store import KnowledgeStore
+
+    return {"store": KnowledgeStore(str(path))}
 
 
 def build_deep_research_tools(
@@ -503,6 +538,7 @@ __all__ = [
     "build_deep_research_tools",
     "ensure_registries_populated",
     "instantiate_registered_tool",
+    "knowledge_tool_kwargs",
     "resolve_agent_tools",
     "resolve_tool_specs",
 ]
