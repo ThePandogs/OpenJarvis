@@ -54,7 +54,9 @@ class KnowledgeSQLTool(BaseTool):
             name="knowledge_sql",
             description=(
                 "Run a read-only SQL SELECT query against the knowledge_chunks table. "
-                "Use for counting, ranking, aggregation, and filtering. "
+                "Use for counting, ranking, aggregation, and filtering, and for "
+                "the latest / most recent items (ORDER BY timestamp DESC) — "
+                "knowledge_search ranks by relevance, not by date. "
                 f"{_SCHEMA_DESCRIPTION}"
             ),
             parameters={
@@ -67,7 +69,10 @@ class KnowledgeSQLTool(BaseTool):
                             "Example: SELECT author, COUNT(*) as n "
                             "FROM knowledge_chunks "
                             "WHERE source='imessage' GROUP BY author "
-                            "ORDER BY n DESC LIMIT 10"
+                            "ORDER BY n DESC LIMIT 10. Latest email: "
+                            "SELECT timestamp, author, title FROM knowledge_chunks "
+                            "WHERE source='gmail' AND deleted_at IS NULL "
+                            "ORDER BY timestamp DESC LIMIT 1"
                         ),
                     },
                 },

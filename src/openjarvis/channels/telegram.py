@@ -294,10 +294,12 @@ class TelegramChannel(BaseChannel):
             logger.debug("Telegram send failed", exc_info=True)
             return False
 
+        logger.info("Telegram reply sent to chat %s (%d chars)", chat_id, len(content))
         # The text already went out; a voice failure must not turn a
         # delivered reply into a reported failure.
         if self._wants_voice_reply(reply_to):
-            self._send_voice(chat_id, content, reply_to)
+            if self._send_voice(chat_id, content, reply_to):
+                logger.info("Telegram voice reply sent to chat %s", chat_id)
         return True
 
     def set_voice(
@@ -596,6 +598,13 @@ class TelegramChannel(BaseChannel):
         return False
 
     def _dispatch(self, cm: ChannelMessage) -> None:
+        # Metadata only: message text never goes to the log.
+        logger.info(
+            "Telegram %s message received from chat %s (%d chars)",
+            "voice" if cm.metadata.get("voice") else "text",
+            cm.conversation_id,
+            len(cm.content),
+        )
         for handler in self._handlers:
             try:
                 handler(cm)

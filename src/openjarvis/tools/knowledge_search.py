@@ -44,7 +44,9 @@ class KnowledgeSearchTool(BaseTool):
             description=(
                 "Search ingested personal knowledge (emails, Slack messages,"
                 " documents) using full-text BM25 retrieval with optional"
-                " filters for source, type, author, and date range."
+                " filters for source, type, author, and date range. Results"
+                " are ranked by relevance, not date: for the latest / most"
+                " recent items use knowledge_sql with ORDER BY timestamp DESC."
             ),
             parameters={
                 "type": "object",
