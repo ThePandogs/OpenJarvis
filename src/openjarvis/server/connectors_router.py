@@ -1014,6 +1014,58 @@ def create_connectors_router():
             "error": effective_error,
         }
 
+    # ------------------------------------------------------------------
+    # Periodic re-sync
+    # ------------------------------------------------------------------
+    #
+    # Without this, nothing re-synced a connector after its first ingest, so
+    # agents answered "what is my latest email?" from an index frozen at
+    # connect time. Each tick goes through _start_sync, the same entry point
+    # as POST /sync, so it shares the already-syncing guard, disconnect
+    # handling and error reporting with the manual button.
+
+    @_serialized_sync
+    def _auto_sync_connector(connector_id: str) -> str:
+        instance = _get_or_create(connector_id)
+        if _disconnect_pending(connector_id) or not instance.is_connected():
+            return "skipped"
+        return _start_sync(connector_id, instance)
+
+    def auto_sync_once() -> list[str]:
+        """Start a background sync for every connected connector."""
+        _ensure_connectors_registered()
+        started = []
+        for connector_id in sorted(ConnectorRegistry.keys()):
+            try:
+                if _auto_sync_connector(connector_id) == "started":
+                    started.append(connector_id)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Auto-sync of %s did not start: %s", connector_id, exc)
+        if started:
+            logger.info("Auto-sync started for %s", ", ".join(started))
+        return started
+
+    auto_sync_stop = threading.Event()
+
+    def start_auto_sync(interval_seconds: float) -> Optional[threading.Thread]:
+        """Re-sync connected connectors every *interval_seconds* (<= 0: off)."""
+        if interval_seconds <= 0:
+            return None
+        auto_sync_stop.clear()
+
+        def _loop() -> None:
+            while not auto_sync_stop.wait(interval_seconds):
+                auto_sync_once()
+
+        thread = threading.Thread(target=_loop, name="connector-auto-sync", daemon=True)
+        thread.start()
+        logger.info("Connector auto-sync every %.0f s", interval_seconds)
+        return thread
+
+    router.auto_sync_once = auto_sync_once  # type: ignore[attr-defined]
+    router.start_auto_sync = start_auto_sync  # type: ignore[attr-defined]
+    router.stop_auto_sync = auto_sync_stop.set  # type: ignore[attr-defined]
+
     return router
 
 

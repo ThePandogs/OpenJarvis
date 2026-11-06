@@ -447,6 +447,7 @@ port = 8000
 agent = "orchestrator"
 model = ""
 workers = 1
+connector_sync_minutes = 0
 ```
 
 | Field | Type | Default | Description |
@@ -456,6 +457,9 @@ workers = 1
 | `agent` | string | `"orchestrator"` | Agent to use for chat completion requests. |
 | `model` | string | `""` | Default model for the server. When empty, uses `intelligence.default_model` or the first available model. |
 | `workers` | int | `1` | Number of uvicorn worker processes. |
+| `connector_sync_minutes` | float | `0` | Re-sync every connected data source this often. `0` syncs only on connect and when you press sync, so agents answer from an index frozen at that moment. Ticks share the manual sync's guard (a sync already running is skipped). IMAP connectors download only mail since the previous completed sync (minus one day). |
+
+Knowledge tools (`knowledge_search`, `knowledge_sql`) append an `[Index freshness]` note with the current time, the newest indexed item and the last completed sync, so the model can say that newer items are not indexed yet instead of presenting the newest indexed one as the newest overall.
 
 CLI options override config values:
 

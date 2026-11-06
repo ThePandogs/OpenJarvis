@@ -96,6 +96,20 @@ class KnowledgeSearchTool(BaseTool):
         )
 
     def execute(self, **params: Any) -> ToolResult:
+        result = self._execute(**params)
+        if result.success:
+            from openjarvis.tools._knowledge_freshness import freshness_note
+
+            store = self._store or getattr(self._retriever, "_store", None)
+            source = params.get("source")
+            note = freshness_note(
+                store, source=source.strip() if isinstance(source, str) else ""
+            )
+            if note:
+                result.content = f"{result.content}\n\n{note}"
+        return result
+
+    def _execute(self, **params: Any) -> ToolResult:
         if self._store is None and self._retriever is None:
             return ToolResult(
                 tool_name="knowledge_search",

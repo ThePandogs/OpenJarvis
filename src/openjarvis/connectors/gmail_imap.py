@@ -12,7 +12,7 @@ import email as email_lib
 import imaplib
 import logging
 import ssl
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from email.header import decode_header
 from email.utils import parsedate_to_datetime
 from imaplib import IMAP4
@@ -31,6 +31,26 @@ _IMAP_TIMEOUT_SECONDS = 30
 _SECURITY_TLS = "tls"
 _SECURITY_STARTTLS = "starttls"
 _UIDVALIDITY_ATTRIBUTE = "_openjarvis_uidvalidity"
+# RFC 3501 dates use English month names regardless of the process locale.
+_IMAP_MONTHS = (
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+)  # fmt: skip
+
+
+def _imap_search_criteria(since: Optional[datetime]) -> tuple[str, ...]:
+    """UID SEARCH criteria for a full scan, or for mail newer than *since*.
+
+    IMAP ``SINCE`` has day granularity and compares the server's internal
+    (arrival) date in the server's timezone, so the cut-off steps back one
+    whole day; pipeline dedup absorbs the overlap.
+    """
+    if since is None:
+        return ("ALL",)
+    if since.tzinfo is not None:
+        since = since.astimezone(timezone.utc)
+    day = (since - timedelta(days=1)).date()
+    return ("SINCE", f"{day.day:02d}-{_IMAP_MONTHS[day.month - 1]}-{day.year}")
 
 
 def _normalize_imap_security(value: str) -> str:
@@ -373,11 +393,17 @@ class GmailIMAPConnector(BaseConnector):
         synced = 0
         try:
             uidvalidity = str(getattr(imap, _UIDVALIDITY_ATTRIBUTE))
-            # SEARCH ALL is deliberate: pipeline dedup makes a complete scan
-            # safe while avoiding gaps after an interrupted backfill.
-            status, data = imap.uid("SEARCH", None, "ALL")
+            # Without a watermark, SEARCH ALL is deliberate: pipeline dedup
+            # makes a complete scan safe while avoiding gaps after an
+            # interrupted backfill. SyncEngine only passes ``since`` once a
+            # sync has run to completion, so everything older is already
+            # indexed and a periodic sync need not re-download the mailbox.
+            criteria = _imap_search_criteria(since)
+            status, data = imap.uid("SEARCH", None, *criteria)
             if status != "OK" or not data or data[0] is None:
-                logger.error("IMAP UID SEARCH ALL failed: %s", status)
+                logger.error(
+                    "IMAP UID SEARCH %s failed: %s", " ".join(criteria), status
+                )
                 return
             message_uids = data[0].split() if data[0] else []
             self._items_total = len(message_uids)

@@ -477,7 +477,22 @@ def create_app(
     app.include_router(router)
     app.include_router(dashboard_router)
     app.include_router(comparison_router)
-    app.include_router(create_connectors_router())
+    connectors_router = create_connectors_router()
+    app.include_router(connectors_router)
+    # Periodic connector re-sync. Only for an explicitly passed config (what
+    # `jarvis serve` does): apps built without one, e.g. in tests, must never
+    # start background syncs against the user's real mailbox.
+    sync_minutes = getattr(getattr(config, "server", None), "connector_sync_minutes", 0)
+    if config is not None and sync_minutes and sync_minutes > 0:
+
+        @app.on_event("startup")
+        async def _start_connector_auto_sync() -> None:
+            connectors_router.start_auto_sync(float(sync_minutes) * 60.0)
+
+        @app.on_event("shutdown")
+        async def _stop_connector_auto_sync() -> None:
+            connectors_router.stop_auto_sync()
+
     app.include_router(create_digest_router())
     app.include_router(upload_router)
     app.include_router(research_router)

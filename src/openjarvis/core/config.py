@@ -1167,6 +1167,9 @@ class ServerConfig:
     agent: str = "orchestrator"
     model: str = ""
     workers: int = 1
+    # Re-sync every connected data source this often (minutes); 0 = only on
+    # connect and when the user presses sync.
+    connector_sync_minutes: float = 0
     cors_origins: list = field(
         default_factory=lambda: [
             "http://localhost:3000",

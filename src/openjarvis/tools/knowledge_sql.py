@@ -82,6 +82,16 @@ class KnowledgeSQLTool(BaseTool):
         )
 
     def execute(self, **params: Any) -> ToolResult:
+        result = self._execute(**params)
+        if result.success:
+            from openjarvis.tools._knowledge_freshness import freshness_note
+
+            note = freshness_note(self._store)
+            if note:
+                result.content = f"{result.content}\n\n{note}"
+        return result
+
+    def _execute(self, **params: Any) -> ToolResult:
         if self._store is None:
             return ToolResult(
                 tool_name="knowledge_sql",
