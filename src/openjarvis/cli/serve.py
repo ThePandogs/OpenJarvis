@@ -556,6 +556,69 @@ def serve(
         except Exception as exc:
             logger.warning("Channel voice setup failed: %s", exc)
 
+    # Scheduled tasks (morning digest, reminders) with channel delivery. The
+    # agent scheduler below only runs managed agents; without this, tasks in
+    # scheduler.db (e.g. from `jarvis digest --schedule`) never ran under serve.
+    task_scheduler = None
+    if channel_bridge is not None and (
+        config.scheduler.enabled or config.digest.enabled
+    ):
+        try:
+            # Local import: serve's other `Path` import only happens when
+            # telemetry is enabled.
+            from pathlib import Path
+
+            from openjarvis.scheduler.delivery import (
+                make_channel_delivery,
+                sync_digest_tasks,
+            )
+            from openjarvis.scheduler.scheduler import TaskScheduler
+            from openjarvis.scheduler.store import SchedulerStore
+
+            channel_name = config.channel.default_channel
+            sched_db = config.scheduler.db_path or str(
+                Path(config.sessions.db_path).expanduser().parent / "scheduler.db"
+            )
+            task_scheduler = TaskScheduler(
+                SchedulerStore(db_path=sched_db),
+                system=_wire_system,
+                poll_interval=config.scheduler.poll_interval,
+                bus=bus,
+                on_result=make_channel_delivery(channel_bridge, channel_name),
+            )
+            if config.digest.enabled:
+                dc = config.digest
+                deliver = {}
+                if dc.deliver_channel:
+                    allowed = getattr(
+                        getattr(config.channel, dc.deliver_channel, None),
+                        "allowed_chat_ids",
+                        "",
+                    )
+                    to = dc.deliver_to or str(allowed).split(",")[0].strip()
+                    if dc.deliver_channel != channel_name:
+                        logger.warning(
+                            "digest.deliver_channel %r is not the active channel %r",
+                            dc.deliver_channel,
+                            channel_name,
+                        )
+                    elif to:
+                        spanish = (dc.language or "").lower().startswith(("es", "span"))
+                        deliver = {
+                            "channel": dc.deliver_channel,
+                            "to": to,
+                            "voice": bool(dc.deliver_voice),
+                            "label": "Resumen de la mañana"
+                            if spanish
+                            else "Morning digest",
+                        }
+                for line in sync_digest_tasks(task_scheduler, dc, deliver):
+                    console.print(f"  Digest: [cyan]{line}[/cyan]")
+            task_scheduler.start()
+        except Exception as exc:
+            logger.warning("Task scheduler setup failed: %s", exc)
+            task_scheduler = None
+
     # Create app
     from openjarvis.server.app import create_app
 

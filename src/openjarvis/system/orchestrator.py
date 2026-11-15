@@ -200,6 +200,9 @@ class QueryOrchestrator:
                     "voice_speed": dc.voice_speed,
                     "tts_backend": dc.tts_backend,
                     "honorific": dc.honorific,
+                    "language": getattr(dc, "language", ""),
+                    "status_files": list(getattr(dc, "status_files", []) or []),
+                    "status_max_age_minutes": getattr(dc, "status_max_age_minutes", 30),
                 }
             )
             from openjarvis.tools.digest_collect import DigestCollectTool

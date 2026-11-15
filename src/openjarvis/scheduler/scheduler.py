@@ -74,6 +74,28 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _once_to_utc(value: str, timezone_name: str | None = None) -> str:
+    """Normalise a one-shot target time to an aware UTC ISO string.
+
+    Due tasks are found by comparing ``next_run`` with ``_now_iso()`` (UTC) as
+    strings, so a naive "2026-11-20T18:00:00" meant as local time used to fire
+    at 18:00 UTC -- an hour early in Madrid in winter, two in summer. A naive
+    value is read in the task's ``timezone`` (or the machine's local zone) and
+    converted; an aware one is just converted. Unparseable values are returned
+    unchanged so existing behaviour does not break.
+    """
+    try:
+        target = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return value
+    if target.tzinfo is None:
+        if timezone_name:
+            target = target.replace(tzinfo=ZoneInfo(timezone_name))
+        else:
+            target = target.astimezone()  # naive -> local zone
+    return target.astimezone(timezone.utc).isoformat()
+
+
 class TaskScheduler:
     """Scheduler that polls for due tasks and executes them.
 
@@ -87,6 +109,10 @@ class TaskScheduler:
         Seconds between poll cycles (default 60).
     bus:
         Optional event bus for publishing scheduler events.
+    on_result:
+        Optional ``callback(task, success, result)`` run after each execution,
+        e.g. to deliver the result to a chat channel. Its errors are logged
+        and never affect the task's own bookkeeping.
     """
 
     def __init__(
@@ -96,11 +122,13 @@ class TaskScheduler:
         *,
         poll_interval: int = 60,
         bus: Any = None,
+        on_result: Any = None,
     ) -> None:
         self._store = store
         self._system = system
         self._poll_interval = poll_interval
         self._bus = bus
+        self._on_result = on_result
         self._stop_event = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self._lock = threading.Lock()
@@ -215,6 +243,7 @@ class TaskScheduler:
 
         success = False
         result_text = ""
+        raw_result: Any = None
         error_text = ""
 
         try:
@@ -235,12 +264,21 @@ class TaskScheduler:
                 if meta.get("operator_id"):
                     ask_kwargs["system_prompt"] = meta.get("system_prompt", "")
                     ask_kwargs["operator_id"] = meta["operator_id"]
-                result_text = self._system.ask(
+                raw_result = self._system.ask(
                     task.prompt,
                     **ask_kwargs,
                 )
+                # JarvisSystem.ask returns a dict. Storing it as-is made
+                # log_run raise (SQLite cannot bind a dict) BEFORE next_run was
+                # advanced, so the task re-ran on every poll.
+                result_text = (
+                    str(raw_result.get("content", ""))
+                    if isinstance(raw_result, dict)
+                    else str(raw_result)
+                )
             else:
                 result_text = f"[dry-run] Would execute: {task.prompt}"
+                raw_result = result_text
             success = True
         except Exception as exc:
             error_text = str(exc)
@@ -269,6 +307,12 @@ class TaskScheduler:
                     d["status"] = "completed"
                 self._store.update_task(d)
 
+        if self._on_result is not None:
+            try:
+                self._on_result(task, success, raw_result if success else error_text)
+            except Exception:
+                logger.exception("Scheduler on_result callback failed for %s", task.id)
+
         # Publish end event
         if self._bus is not None:
             self._bus.publish(
@@ -293,7 +337,8 @@ class TaskScheduler:
             if task.last_run is not None:
                 return None
             # Otherwise the schedule_value is the target ISO datetime
-            return task.schedule_value
+            timezone_name = str((task.metadata or {}).get("timezone") or "") or None
+            return _once_to_utc(task.schedule_value, timezone_name)
 
         if task.schedule_type == "interval":
             seconds = float(task.schedule_value)

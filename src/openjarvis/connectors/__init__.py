@@ -129,6 +129,11 @@ except ImportError:
     pass
 
 try:
+    import openjarvis.connectors.open_meteo  # noqa: F401
+except ImportError:
+    pass
+
+try:
     import openjarvis.connectors.github_notifications  # noqa: F401
 except ImportError:
     pass

@@ -186,6 +186,51 @@ Add any RSS or Atom feed to `~/.openjarvis/connectors/news_rss.json`:
 ]}
 ```
 
+### Delivered to Telegram, on several schedules
+
+`jarvis serve` runs the digest itself and pushes it to the chat channel when
+`[digest] enabled = true` (it also needs a channel: `[channel] enabled`). The
+text goes first; the voice note follows, reusing the WAV the digest already
+synthesized (Kokoro) instead of synthesizing twice.
+
+```toml
+[digest]
+enabled = true
+schedules = ["0 8 * * 1-5", "0 10 * * 0,6"]  # weekdays 08:00, weekends 10:00
+timezone = "Europe/Madrid"                   # crons are evaluated here
+language = "Spanish"
+honorific = "Carlos"
+tts_backend = "kokoro"
+voice_id = "ef_dora"
+deliver_channel = "telegram"                 # "" = only store the digest
+deliver_to = ""                              # "" = first allowed_chat_ids
+deliver_voice = true
+status_files = ['F:\Backups\Nas\BamboNas\vigilante_estado.txt']
+status_max_age_minutes = 30
+```
+
+- `schedules` is a list because cron uses commas (`0,6`). The digest tasks in
+  `scheduler.db` are reconciled with it at every start: edit and restart.
+- A cron without a timezone is evaluated in UTC, so `timezone` matters.
+- `status_files`: the first line of each file is appended to the text
+  verbatim (never spoken or paraphrased). A file older than
+  `status_max_age_minutes`, or missing, is flagged with ⚠ — so a monitor that
+  stopped writing shows up in the morning instead of looking healthy.
+- If a scheduled run fails, the chat gets "⚠ <label>: <error>" instead of
+  silence.
+
+### Weather without an API key: `open_meteo`
+
+The `weather` connector needs an OpenWeatherMap key and reports °F. The
+`open_meteo` connector needs nothing but a place name and reports °C:
+
+```python
+from openjarvis.connectors.open_meteo import OpenMeteoConnector
+OpenMeteoConnector().configure("Vigo")   # writes ~/.openjarvis/connectors/open_meteo.json
+```
+
+Then add `"open_meteo"` to `[digest.world] sources`.
+
 ## API Endpoints
 
 The digest is also available via the FastAPI server:

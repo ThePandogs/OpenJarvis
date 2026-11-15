@@ -326,6 +326,20 @@ class TelegramChannel(BaseChannel):
         with self._voice_lock:
             return self._voice_message_ids.pop(str(reply_to), "missing") is None
 
+    def send_voice(self, chat_id: str, text: str, *, reply_to: str = "") -> bool:
+        """Public: synthesize *text* and send it as a voice note.
+
+        Needs a synthesizer from :meth:`set_voice`; returns False without one.
+        Used by scheduled deliveries (e.g. the morning digest).
+        """
+        if self._synthesizer is None:
+            return False
+        return self._send_voice(chat_id, text, reply_to)
+
+    def send_voice_audio(self, chat_id: str, ogg: bytes, *, reply_to: str = "") -> bool:
+        """Public: upload already-encoded OGG/Opus bytes as a voice note."""
+        return self._upload_voice(chat_id, ogg, reply_to)
+
     def _send_voice(self, chat_id: str, content: str, reply_to: str) -> bool:
         """Synthesize *content* and upload it as a Telegram voice note."""
         from openjarvis.channels._voice import text_for_speech
@@ -334,9 +348,17 @@ class TelegramChannel(BaseChannel):
         if not spoken:
             return False
         try:
+            ogg = self._synthesizer(spoken)
+        except Exception as exc:
+            logger.warning("Telegram voice reply failed: %s", type(exc).__name__)
+            logger.debug("Telegram voice synthesis failure detail", exc_info=True)
+            return False
+        return self._upload_voice(chat_id, ogg, reply_to)
+
+    def _upload_voice(self, chat_id: str, ogg: bytes, reply_to: str) -> bool:
+        try:
             import httpx
 
-            ogg = self._synthesizer(spoken)
             data: Dict[str, Any] = {"chat_id": chat_id}
             if reply_to:
                 data["reply_to_message_id"] = reply_to

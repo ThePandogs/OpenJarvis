@@ -34,7 +34,7 @@ _SECTION_ORDER: List[tuple] = [
         },
     ),
     ("CALENDAR", {"gcalendar"}),
-    ("WORLD", {"weather", "hackernews", "news_rss"}),
+    ("WORLD", {"weather", "open_meteo", "hackernews", "news_rss"}),
     ("MUSIC", {"spotify", "apple_music"}),
 ]
 
@@ -304,6 +304,11 @@ def _format_weather(doc: Document) -> str:
     return f"[weather] {doc.title}"
 
 
+def _format_open_meteo(doc: Document) -> str:
+    """Open-Meteo documents already carry a one-line, unit-correct summary."""
+    return f"[weather] {doc.content}"
+
+
 def _format_github_notifications(doc: Document) -> str:
     """Format a GitHub notification."""
     reason = doc.metadata.get("reason", "")
@@ -348,6 +353,7 @@ _FORMATTERS: Dict[str, Any] = {
     "notion": _format_notion,
     "gcalendar": _format_gcalendar,
     "weather": _format_weather,
+    "open_meteo": _format_open_meteo,
     "github_notifications": _format_github_notifications,
     "hackernews": _format_hackernews,
     "news_rss": _format_news_rss,

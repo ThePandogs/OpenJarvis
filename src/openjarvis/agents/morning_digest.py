@@ -57,7 +57,38 @@ class MorningDigestAgent(ToolUsingAgent):
         self._tts_backend = kwargs.pop("tts_backend", "cartesia")
         self._digest_store_path = kwargs.pop("digest_store_path", "")
         self._honorific = kwargs.pop("honorific", "sir")
+        self._language = kwargs.pop("language", "")
+        self._status_files = kwargs.pop("status_files", [])
+        self._status_max_age_minutes = kwargs.pop("status_max_age_minutes", 30)
         super().__init__(*args, **kwargs)
+
+    def _status_footer(self, now: Optional[datetime] = None) -> str:
+        """First line of each configured status file, verbatim.
+
+        Deliberately outside the LLM: these lines are a heartbeat (e.g. "NAS OK,
+        checked 07:55"), so they must be reproduced exactly, and a missing or
+        stale file must be reported rather than silently dropped -- otherwise a
+        dead monitor would look like a healthy one.
+        """
+        now = now or datetime.now()
+        lines: List[str] = []
+        for raw in self._status_files or []:
+            path = Path(str(raw)).expanduser()
+            try:
+                text = path.read_text(encoding="utf-8-sig").strip().splitlines()
+                first = text[0].strip() if text else ""
+                mtime = datetime.fromtimestamp(path.stat().st_mtime)
+            except OSError:
+                lines.append(f"⚠ {path.name}: no disponible")
+                continue
+            age_min = (now - mtime).total_seconds() / 60
+            if age_min > self._status_max_age_minutes:
+                lines.append(
+                    f"⚠ {first or path.name} (sin actualizar desde {mtime:%d/%m %H:%M})"
+                )
+            elif first:
+                lines.append(first)
+        return "\n".join(lines)
 
     def _build_system_prompt(self) -> str:
         """Assemble the system prompt from persona + briefing structure."""
@@ -95,6 +126,12 @@ class MorningDigestAgent(ToolUsingAgent):
             "- Acknowledge every source that returned data, even briefly.\n"
             "- No markdown, emojis, bullets, or headers.\n"
             "- STRICT LIMIT: 200 words. Be concise."
+            + (
+                f"\n- Write the whole briefing in {self._language}, including "
+                "dates, times and the honorific."
+                if getattr(self, "_language", "")
+                else ""
+            )
         )
 
     def _resolve_sources(self) -> List[str]:
@@ -109,7 +146,7 @@ class MorningDigestAgent(ToolUsingAgent):
             ],
             "calendar": ["gcalendar"],
             "health": ["oura", "apple_health"],
-            "world": ["weather", "hackernews", "news_rss"],
+            "world": ["weather", "open_meteo", "hackernews", "news_rss"],
             "music": ["spotify", "apple_music"],
         }
         sources = set()
@@ -231,13 +268,20 @@ class MorningDigestAgent(ToolUsingAgent):
         store.save(artifact)
         store.close()
 
+        # Status lines go after the spoken part, verbatim, and only in the text:
+        # they are a heartbeat, not something to read aloud or paraphrase.
+        footer = self._status_footer()
+        content = f"{narrative}\n\n{footer}" if footer else narrative
+
         self._emit_turn_end(turns=1)
         return AgentResult(
-            content=narrative,
+            content=content,
             tool_results=[collect_result, tts_result],
             turns=1,
             metadata={
                 "audio_path": audio_path,
                 "sources_used": sources,
+                "spoken_text": tts_text,
+                "status_footer": footer,
             },
         )

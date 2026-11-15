@@ -1759,6 +1759,24 @@ class DigestConfig:
     voice_id: str = ""
     voice_speed: float = 1.0
     tts_backend: str = "cartesia"
+    # Language the briefing is written in ("" = model default, usually English).
+    language: str = ""
+    # Several cron expressions, each evaluated in ``timezone`` (e.g. weekdays
+    # at 08:00 and weekends at 10:00). Overrides ``schedule`` when non-empty.
+    # A list, not a string: cron uses commas ("0,6"), which the TOML loader
+    # would otherwise treat as list separators.
+    schedules: List[str] = field(default_factory=list)
+    # Push each scheduled digest to a channel ("telegram"); "" = only store it.
+    deliver_channel: str = ""
+    # Destination on that channel; "" = first of the channel's allowed ids.
+    deliver_to: str = ""
+    deliver_voice: bool = True
+    # Files whose first line is appended verbatim to the digest text (not
+    # spoken, never paraphrased by the model), e.g. a monitor's status line.
+    # A file older than ``status_max_age_minutes`` is flagged as stale, so a
+    # dead monitor shows up in the briefing instead of looking healthy.
+    status_files: List[str] = field(default_factory=list)
+    status_max_age_minutes: int = 30
     messages: DigestSectionConfig = field(
         default_factory=lambda: DigestSectionConfig(
             sources=["gmail", "slack", "google_tasks"]
