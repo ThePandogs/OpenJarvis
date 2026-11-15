@@ -1142,6 +1142,19 @@ class WeatherToolConfig:
 
 
 @dataclass(slots=True)
+class TrueNasToolConfig:
+    """Read-only NAS status tool (``nas_status``).
+
+    The API key (TRUENAS_API_KEY) stays outside config.toml; give it to a user
+    whose only role is READONLY_ADMIN.
+    """
+
+    url: str = ""  # e.g. "wss://192.168.1.124/api/current"
+    verify_ssl: bool = False  # TrueNAS ships a self-signed certificate
+    timeout: float = 15.0
+
+
+@dataclass(slots=True)
 class ToolsConfig:
     """Tools primitive settings — wraps storage and MCP configuration."""
 
@@ -1149,6 +1162,7 @@ class ToolsConfig:
     mcp: MCPConfig = field(default_factory=MCPConfig)
     browser: BrowserConfig = field(default_factory=BrowserConfig)
     weather: WeatherToolConfig = field(default_factory=WeatherToolConfig)
+    truenas: TrueNasToolConfig = field(default_factory=TrueNasToolConfig)
     enabled: str = ""  # comma-separated default tools
 
 

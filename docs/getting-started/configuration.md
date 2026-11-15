@@ -478,6 +478,30 @@ environment variable is present.
 
 ---
 
+### `[tools.truenas]` — Read-only NAS Status Tool
+
+`nas_status` answers "how is the NAS doing?" from a TrueNAS SCALE box: active
+alerts (most severe first), pool health and usage with the last scrub, app
+states, last automatic snapshot, uptime, load and RAM. It only calls query
+methods over the JSON-RPC WebSocket API (`wss://<host>/api/current`).
+
+```toml
+[tools]
+enabled = ["web_search", "knowledge_search", "knowledge_sql", "nas_status"]
+
+[tools.truenas]
+url = "wss://192.168.1.124/api/current"
+verify_ssl = false          # TrueNAS ships a self-signed certificate
+timeout = 15
+```
+
+The API key goes in `TRUENAS_API_KEY` (environment or tool credentials), never
+in `config.toml`. Create it for a dedicated TrueNAS user whose **only role is
+`READONLY_ADMIN`**, so that even a misbehaving model cannot change anything.
+If the NAS does not answer, the tool says so instead of failing silently.
+
+---
+
 ### `[server]` — API Server
 
 Controls the OpenAI-compatible API server started by `jarvis serve`.
