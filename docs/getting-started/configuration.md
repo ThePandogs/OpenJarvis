@@ -156,6 +156,9 @@ output) is answered by `model`, and the reply starts with `notice`. Typical
 case: Ollama runs on a desktop PC and the server on an always-on box.
 
 ```toml
+[engine]
+billing_notice = "Me he quedado sin saldo de Claude."
+
 [engine.ollama]
 host = "http://192.168.1.96:11434"
 
@@ -163,7 +166,6 @@ host = "http://192.168.1.96:11434"
 enabled = true
 model = "claude-haiku-5-5"            # needs ANTHROPIC_API_KEY
 notice = "⚠️ PC apagado, respondiendo con Claude."
-billing_notice = "Me he quedado sin saldo de Claude; con el PC encendido sigo funcionando."
 recheck_seconds = 30
 ```
 
@@ -172,13 +174,20 @@ recheck_seconds = 30
 | `enabled` | bool | `false` | Turn the fallback on. Needs a key for `model`'s provider; without one it stays off and the server says so at startup. |
 | `model` | string | `""` | Cloud model used while the local engine is down. |
 | `notice` | string | (English) | Prepended to fallback replies. `{model}` is replaced. |
-| `billing_notice` | string | (English) | Replaces the reply when the provider refuses for lack of credit (HTTP 402, "credit balance", "insufficient_quota"…). Logged once. |
 | `recheck_seconds` | float | `30` | How long a failed health check is trusted, so a powered-off machine does not add a probe timeout to every message. |
 
 With the fallback on, `jarvis serve` also starts when the local engine is
 unreachable (instead of exiting), and the configured local model stays listed
 so clients keep selecting it. Context-length errors never trigger the
 fallback, and a stream that already produced output is not switched mid-answer.
+
+#### `[engine] billing_notice` — "out of credit" as a reply, not an error
+
+When set, a cloud provider refusing a request for lack of credit (HTTP 402,
+"credit balance", "insufficient_quota"…) is answered with this text instead of
+an error, whether the cloud model is the fallback or the default (a
+cloud-only setup with `default = "cloud"`). `{model}` is replaced; the event is
+logged once. Empty (the default) keeps raising as before.
 
 ---
 

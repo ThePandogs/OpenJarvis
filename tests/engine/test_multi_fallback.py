@@ -290,3 +290,59 @@ def test_config_defaults_off_and_toml(tmp_path):
         "claude-haiku-5-5",
         "aviso {model}",
     )
+
+
+# -- cloud model as the default (no fallback) ---------------------------------
+
+
+def test_cloud_default_billing_error_is_a_clear_reply():
+    err = Exception("Your credit balance is too low")
+    cloud = FakeCloud(error=err)
+    multi = MultiEngine([("cloud", cloud)], billing_notice=BILLING)
+    out = multi.generate([], model="claude-haiku-5-5")
+    assert out["content"] == "Me he quedado sin saldo de Claude (claude-haiku-5-5)."
+
+
+def test_cloud_default_billing_error_in_streams():
+    err = Exception("credit balance is too low")
+    multi = MultiEngine([("cloud", FakeCloud(error=err))], billing_notice=BILLING)
+    assert _collect(multi.stream([], model="claude-haiku-5-5")) == [
+        "Me he quedado sin saldo de Claude (claude-haiku-5-5)."
+    ]
+    chunks = _collect(multi.stream_full([], model="claude-haiku-5-5"))
+    assert [c.content for c in chunks] == [
+        "Me he quedado sin saldo de Claude (claude-haiku-5-5)."
+    ]
+
+
+def test_cloud_default_other_errors_and_no_notice_raise():
+    multi = MultiEngine(
+        [("cloud", FakeCloud(error=RuntimeError("bad key")))], billing_notice=BILLING
+    )
+    with pytest.raises(RuntimeError):
+        multi.generate([], model="claude-haiku-5-5")
+    multi = MultiEngine(
+        [("cloud", FakeCloud(error=Exception("credit balance is too low")))]
+    )
+    with pytest.raises(Exception, match="credit balance"):
+        multi.generate([], model="claude-haiku-5-5")
+
+
+def test_engine_billing_notice_config(tmp_path):
+    from openjarvis.core.config import JarvisConfig, load_config
+
+    assert JarvisConfig().engine.billing_notice == ""
+    path = tmp_path / "config.toml"
+    path.write_text(
+        '[engine]\ndefault = "cloud"\nbilling_notice = "sin saldo"\n',
+        encoding="utf-8",
+    )
+    assert load_config(path).engine.billing_notice == "sin saldo"
+
+
+def test_current_anthropic_models_are_listed():
+    from openjarvis.engine.cloud import _ANTHROPIC_MODELS
+
+    assert {"claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5"} <= set(
+        _ANTHROPIC_MODELS
+    )

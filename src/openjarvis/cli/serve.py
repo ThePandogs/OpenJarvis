@@ -288,16 +288,19 @@ def serve(
     if cloud_engine is not None:
         multi_entries.append(("cloud", cloud_engine))
 
-    if len(multi_entries) > 1:
+    # A billing notice needs MultiEngine (it turns "out of credit" refusals into
+    # a reply), so wrap even a single engine -- e.g. a cloud-only setup.
+    billing_notice = config.engine.billing_notice
+    if len(multi_entries) > 1 or billing_notice:
         from openjarvis.engine.multi import MultiEngine
 
-        fallback_kwargs = {}
+        fallback_kwargs = {"billing_notice": billing_notice}
         if fallback_cfg.enabled and fallback_cfg.model:
             if any(key == "cloud" for key, _eng in multi_entries):
                 fallback_kwargs = {
                     "cloud_fallback_model": fallback_cfg.model,
                     "fallback_notice": fallback_cfg.notice,
-                    "billing_notice": fallback_cfg.billing_notice,
+                    "billing_notice": billing_notice,
                     "local_default_model": (
                         model_name
                         or config.server.model

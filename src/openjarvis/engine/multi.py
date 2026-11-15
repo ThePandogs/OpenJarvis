@@ -166,15 +166,22 @@ class MultiEngine(InferenceEngine):
     def _notice(self) -> str:
         return (self._fallback_notice or "").format(model=self._fallback_model)
 
-    def _billing_text(self, exc: BaseException) -> str:
+    def _billing_text(self, exc: BaseException, model: str = "") -> str:
+        model = model or self._fallback_model
         if not self._billing_warned:
             self._billing_warned = True
             logger.warning(
-                "Cloud fallback %s refused for lack of credit: %s",
-                self._fallback_model,
+                "Cloud model %s refused for lack of credit: %s",
+                model,
                 type(exc).__name__,
             )
-        return (self._billing_notice or str(exc)).format(model=self._fallback_model)
+        return (self._billing_notice or str(exc)).format(model=model)
+
+    def _billing_reply(self, exc: BaseException, model: str) -> Optional[str]:
+        """Reply text for a lack-of-credit refusal, or None to re-raise."""
+        if self._billing_notice and is_billing_error(exc):
+            return self._billing_text(exc, model)
+        return None
 
     def _cloud_generate(self, messages, kwargs) -> Dict[str, Any]:
         cloud = self._cloud_engine()
@@ -218,6 +225,13 @@ class MultiEngine(InferenceEngine):
                 "Local model %r unreachable; using %s", model, self._fallback_model
             )
             return self._cloud_generate(messages, call)
+        except Exception as exc:
+            # A cloud model used directly (not as fallback) running out of
+            # credit gets the same clear message instead of a stack trace.
+            reply = self._billing_reply(exc, model)
+            if reply is None:
+                raise
+            return {"content": reply, "finish_reason": "stop"}
 
     def _local_engine_for(self, model: str) -> InferenceEngine:
         """``_engine_for``, but a model no engine lists counts as unreachable
@@ -258,6 +272,12 @@ class MultiEngine(InferenceEngine):
                 if yielded or not self._fallback_ready(model):
                     raise
                 self._mark_local_down()
+            except Exception as exc:
+                reply = None if yielded else self._billing_reply(exc, model)
+                if reply is None:
+                    raise
+                yield reply
+                return
         async for token in self._cloud_stream(messages, call):
             yield token
 
@@ -299,6 +319,12 @@ class MultiEngine(InferenceEngine):
                 if yielded or not self._fallback_ready(model):
                     raise
                 self._mark_local_down()
+            except Exception as exc:
+                reply = None if yielded else self._billing_reply(exc, model)
+                if reply is None:
+                    raise
+                yield StreamChunk(content=reply, finish_reason="stop")
+                return
         notice = self._notice()
         if notice:
             yield StreamChunk(content=f"{notice}\n\n")

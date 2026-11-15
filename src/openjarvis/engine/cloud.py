@@ -90,6 +90,13 @@ _ANTHROPIC_MODELS = [
     "claude-sonnet-4-6",
     "claude-haiku-4-5",
     "claude-haiku-4-5-20251001",
+    # Current generation. Without them in this list, `jarvis serve` with
+    # default_model = "claude-haiku-5-5" did not find the model among the
+    # engine's and silently fell back to the first listed one (Sonnet 4).
+    "claude-fable-5-1",
+    "claude-opus-5-5",
+    "claude-sonnet-5-5",
+    "claude-haiku-5-5",
 ]
 _ANTHROPIC_FIXED_SAMPLING_PREFIXES = (
     "claude-opus-4-7",

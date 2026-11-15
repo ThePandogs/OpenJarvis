@@ -481,17 +481,12 @@ class CloudFallbackConfig:
     cloud on its own (a vLLM blip would otherwise send a whole agentic run to a
     paid API). When enabled, a request for a local model whose engine is down
     is answered by ``model`` and the reply starts with ``notice`` so the user
-    knows. ``billing_notice`` replaces the reply when the cloud provider
-    rejects the request for lack of credit.
+    knows. A lack-of-credit refusal is handled by ``[engine] billing_notice``.
     """
 
     enabled: bool = False
     model: str = ""  # e.g. "claude-haiku-5-5"
     notice: str = "⚠️ Local model unavailable — answering with {model}."
-    billing_notice: str = (
-        "⚠️ The cloud fallback ({model}) has run out of credit. "
-        "Start the local model to keep going."
-    )
     # How long a failed local health check is trusted before probing again.
     recheck_seconds: float = 30.0
 
@@ -501,6 +496,11 @@ class EngineConfig:
     """Inference engine settings with nested per-engine configs."""
 
     default: str = "ollama"
+    # Reply used instead of an error when a cloud provider refuses a request
+    # for lack of credit (HTTP 402, "credit balance", "insufficient_quota"…),
+    # whether the cloud model is the default or the fallback. "" = raise as
+    # before. "{model}" is replaced by the model name.
+    billing_notice: str = ""
     ollama: OllamaEngineConfig = field(default_factory=OllamaEngineConfig)
     vllm: VLLMEngineConfig = field(default_factory=VLLMEngineConfig)
     sglang: SGLangEngineConfig = field(default_factory=SGLangEngineConfig)
