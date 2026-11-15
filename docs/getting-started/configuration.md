@@ -147,6 +147,39 @@ host = "http://localhost:30000"
 !!! note "Backward compatibility"
     The old flat field names (`ollama_host`, `vllm_host`, `llamacpp_host`, `llamacpp_path`, `sglang_host`) are still accepted as backward-compatible properties. New configurations should use the nested sub-section format.
 
+#### `[engine.cloud_fallback]` — answer with a cloud model while the local one is down
+
+Off by default: on its own, `MultiEngine` never sends a local model's
+requests to a paid cloud API. With it on, a request for a local model whose
+engine is unreachable (failed health check, or a connection error before any
+output) is answered by `model`, and the reply starts with `notice`. Typical
+case: Ollama runs on a desktop PC and the server on an always-on box.
+
+```toml
+[engine.ollama]
+host = "http://192.168.1.96:11434"
+
+[engine.cloud_fallback]
+enabled = true
+model = "claude-haiku-5-5"            # needs ANTHROPIC_API_KEY
+notice = "⚠️ PC apagado, respondiendo con Claude."
+billing_notice = "Me he quedado sin saldo de Claude; con el PC encendido sigo funcionando."
+recheck_seconds = 30
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enabled` | bool | `false` | Turn the fallback on. Needs a key for `model`'s provider; without one it stays off and the server says so at startup. |
+| `model` | string | `""` | Cloud model used while the local engine is down. |
+| `notice` | string | (English) | Prepended to fallback replies. `{model}` is replaced. |
+| `billing_notice` | string | (English) | Replaces the reply when the provider refuses for lack of credit (HTTP 402, "credit balance", "insufficient_quota"…). Logged once. |
+| `recheck_seconds` | float | `30` | How long a failed health check is trusted, so a powered-off machine does not add a probe timeout to every message. |
+
+With the fallback on, `jarvis serve` also starts when the local engine is
+unreachable (instead of exiting), and the configured local model stays listed
+so clients keep selecting it. Context-length errors never trigger the
+fallback, and a stream that already produced output is not switched mid-answer.
+
 ---
 
 ### `[intelligence]` — Model Identity and Generation Defaults

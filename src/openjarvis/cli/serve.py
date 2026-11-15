@@ -195,6 +195,24 @@ def serve(
         model_name or config.server.model or config.intelligence.default_model or None
     )
     resolved = get_engine(config, engine_key, model=selection_model)
+    fallback_cfg = config.engine.cloud_fallback
+    if resolved is None and fallback_cfg.enabled and fallback_cfg.model:
+        # The local engine is down (e.g. the PC running Ollama is off) but a
+        # cloud fallback is configured: start anyway with the local engine as
+        # primary, so requests go to it as soon as it is back and to the
+        # fallback model meanwhile. Without this the server exits, and a
+        # supervisor would restart it in a loop until the PC is switched on.
+        from openjarvis.engine._discovery import _make_engine
+
+        default_key = engine_key or config.engine.default
+        try:
+            resolved = (default_key, _make_engine(default_key, config))
+            console.print(
+                f"  [yellow]Engine {default_key!r} unreachable at startup; "
+                f"answering with {fallback_cfg.model} until it is back.[/yellow]"
+            )
+        except Exception as exc:
+            logger.warning("Could not create engine %r: %s", default_key, exc)
     if resolved is None:
         console.print(
             "[red bold]No inference engine available.[/red bold]\n\n"
@@ -273,7 +291,27 @@ def serve(
     if len(multi_entries) > 1:
         from openjarvis.engine.multi import MultiEngine
 
-        engine = MultiEngine(multi_entries)
+        fallback_kwargs = {}
+        if fallback_cfg.enabled and fallback_cfg.model:
+            if any(key == "cloud" for key, _eng in multi_entries):
+                fallback_kwargs = {
+                    "cloud_fallback_model": fallback_cfg.model,
+                    "fallback_notice": fallback_cfg.notice,
+                    "billing_notice": fallback_cfg.billing_notice,
+                    "local_default_model": (
+                        model_name
+                        or config.server.model
+                        or config.intelligence.default_model
+                    ),
+                    "recheck_seconds": fallback_cfg.recheck_seconds,
+                }
+                console.print(f"  Fallback: [cyan]{fallback_cfg.model}[/cyan]")
+            else:
+                console.print(
+                    "  [yellow]Fallback configured but no cloud API key: "
+                    "it stays off.[/yellow]"
+                )
+        engine = MultiEngine(multi_entries, **fallback_kwargs)
         engine_name = "multi"
         all_models[engine_name] = engine.list_models()
         merge_discovered_models(engine_name, all_models[engine_name])

@@ -473,6 +473,29 @@ class LemonadeEngineConfig:
     host: str = "http://localhost:13305"
 
 
+@dataclass(slots=True)
+class CloudFallbackConfig:
+    """Answer with a cloud model while the local engine is unreachable.
+
+    Off by default: MultiEngine deliberately never routes a local model to the
+    cloud on its own (a vLLM blip would otherwise send a whole agentic run to a
+    paid API). When enabled, a request for a local model whose engine is down
+    is answered by ``model`` and the reply starts with ``notice`` so the user
+    knows. ``billing_notice`` replaces the reply when the cloud provider
+    rejects the request for lack of credit.
+    """
+
+    enabled: bool = False
+    model: str = ""  # e.g. "claude-haiku-5-5"
+    notice: str = "⚠️ Local model unavailable — answering with {model}."
+    billing_notice: str = (
+        "⚠️ The cloud fallback ({model}) has run out of credit. "
+        "Start the local model to keep going."
+    )
+    # How long a failed local health check is trusted before probing again.
+    recheck_seconds: float = 30.0
+
+
 @dataclass
 class EngineConfig:
     """Inference engine settings with nested per-engine configs."""
@@ -491,6 +514,7 @@ class EngineConfig:
     afm: AfmEngineConfig = field(default_factory=AfmEngineConfig)
     gemma_cpp: GemmaCppEngineConfig = field(default_factory=GemmaCppEngineConfig)
     lemonade: LemonadeEngineConfig = field(default_factory=LemonadeEngineConfig)
+    cloud_fallback: CloudFallbackConfig = field(default_factory=CloudFallbackConfig)
 
     # Backward-compat properties for old flat attribute names
     @property
